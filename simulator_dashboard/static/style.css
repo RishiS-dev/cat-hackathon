@@ -1,0 +1,152 @@
+/* --- Google Font --- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* --- Global Styles & CAT Color Palette --- */
+:root {
+    --cat-yellow: #FFD100;
+    --cat-black: #1a1a1a;
+    --cat-dark-grey: #2b2b2b;
+    --cat-light-grey: #444;
+    --cat-white: #FFFFFF;
+    --cat-red-alert: #e60023;
+    --cat-green-ok: #27ae60;
+    --cat-blue-info: #3498db;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--cat-black);
+    color: var(--cat-white);
+    height: 100vh;
+    overflow: hidden; /* Prevent scrolling on the main page */
+}
+
+/* --- Main Layout --- */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 1rem;
+    height: 100vh;
+    padding: 1rem;
+}
+
+.header {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--cat-yellow);
+}
+
+.widget {
+    background-color: var(--cat-dark-grey);
+    border-radius: 12px;
+    padding: 1rem;
+    border-top: 4px solid var(--cat-yellow);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+}
+
+.widget-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--cat-yellow);
+}
+
+/* --- Specific Widget Styles --- */
+.schedule-widget {
+    overflow-y: auto; /* Make schedule scrollable */
+}
+
+.schedule-list {
+    list-style: none;
+    padding: 0;
+}
+
+.schedule-item {
+    background-color: var(--cat-light-grey);
+    padding: 0.75rem;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+/* --- Proximity Visualizer --- */
+.proximity-visualizer {
+    position: relative;
+    width: 240px;
+    height: 240px;
+    margin: auto;
+}
+.excavator-icon {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 33%; height: 33%;
+    background-color: var(--cat-light-grey);
+    border: 2px solid var(--cat-yellow);
+    border-radius: 0.5rem;
+    display: flex; align-items: center; justify-content: center;
+}
+.sensor-segment {
+    position: absolute;
+    width: 10%; height: 10%;
+    background-color: var(--cat-light-grey);
+    border-radius: 50%;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.4rem;
+    font-weight: 700; color: var(--cat-white);
+    transform-origin: center;
+    border: 1px solid var(--cat-black);
+}
+.zone-NEAR { background-color: var(--cat-red-alert); animation: pulse 1.5s infinite; }
+.zone-MEDIUM { background-color: var(--cat-yellow); }
+.zone-FAR { background-color: var(--cat-green-ok); }
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+/* --- Gauge Styles --- */
+.gauge { width: 100%; max-width: 100px; margin: auto; }
+.gauge-text { font-size: 1.1rem; font-weight: 700; color: var(--cat-white); }
+.gauge-unit { font-size: 0.7rem; color: #9ca3af; }
+.gauge-needle { transition: transform 0.5s ease-in-out; }
+.gauge-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; color: #9ca3af; margin-top: 2px; }
+
+/* --- Fuel Gauge --- */
+.fuel-container {
+    width: 25px; height: 60px; background-color: var(--cat-light-grey);
+    border-radius: 0.5rem; border: 2px solid var(--cat-light-grey);
+    padding: 3px; margin: auto;
+}
+.fuel-level {
+    background: linear-gradient(to top, var(--cat-red-alert), var(--cat-yellow), var(--cat-green-ok));
+    border-radius: 0.25rem; width: 100%; height: 100%;
+    transition: transform 0.5s ease-out; transform-origin: bottom;
+}
+
+/* --- Header Status Indicators --- */
+#seatbelt_status.on {
+    background-color: rgba(39, 174, 96, 0.2);
+    color: var(--cat-green-ok);
+}
+#seatbelt_status.off {
+    background-color: rgba(230, 0, 35, 0.2);
+    color: var(--cat-red-alert);
+}
+#ignition_indicator.on { background-color: var(--cat-green-ok); }
+#ignition_indicator.off { background-color: var(--cat-light-grey); }
+

@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operator Dashboard | EXC001</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700;900&display=swap');
+        :root {
+            --cat-yellow: #FCD303; --cat-black: #1a1a1a; --cat-dark-grey: #2b2b2b;
+            --cat-light-grey: #444; --cat-white: #FFFFFF; --cat-red-alert: #e60023;
+            --cat-green-ok: #27ae60;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { font-family: 'Roboto', sans-serif; background-color: var(--cat-black); color: var(--cat-white); overflow-x: hidden; }
+        .widget { min-width: 0; min-height: 0; }
+        .dashboard-grid { display: grid; grid-template-columns: 1.2fr 1fr; grid-template-rows: auto 1fr; gap: 1rem; min-height: 100vh; padding: 1rem; }
+        .header { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.5rem; background-color: var(--cat-yellow); color: var(--cat-black); border-radius: 12px; margin-bottom: 1rem; }
+        .header h1, .header p, .header span, .header div { color: var(--cat-black); }
+        .widget { background-color: var(--cat-dark-grey); border-radius: 12px; padding: 1rem; border-top: 4px solid var(--cat-yellow); box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; }
+        .widget-title { font-size: 0.9rem; font-weight: 700; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px; color: var(--cat-yellow); }
+        .schedule-widget .schedule-list { list-style: none; display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 1rem; }
+        .schedule-widget .schedule-item { background-color: var(--cat-light-grey); padding: 0.75rem; border-radius: 6px; font-size: 0.9rem; flex-shrink: 0; width: 180px; cursor: pointer; border: 2px solid transparent; }
+        .schedule-widget .schedule-item.active { border-color: var(--cat-yellow); }
+        .proximity-visualizer { position: relative; width: 240px; height: 240px; margin: auto; }
+        .excavator-icon { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 33%; height: 33%; background-color: var(--cat-light-grey); border: 2px solid var(--cat-yellow); border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; }
+        .sensor-segment { position: absolute; width: 10%; height: 10%; background-color: var(--cat-light-grey); border-radius: 50%; transition: background-color 0.3s ease, transform 0.3s ease; display: flex; align-items: center; justify-content: center; font-size: 0.4rem; font-weight: 700; color: var(--cat-white); transform-origin: center; border: 1px solid var(--cat-black); }
+        .zone-NEAR { background-color: var(--cat-red-alert); animation: pulse 1.5s infinite; }
+        .zone-MEDIUM { background-color: var(--cat-yellow); color: var(--cat-black); font-weight: 900; }
+        .zone-FAR { background-color: var(--cat-green-ok); }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+        .gauge { width: 100%; max-width: 100px; margin: auto; }
+        .gauge-text { font-size: 1.1rem; font-weight: 700; color: var(--cat-white); }
+        .gauge-unit { font-size: 0.7rem; color: #9ca3af; }
+        .gauge-needle { transition: transform 0.5s ease-in-out; }
+        .gauge-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; color: #9ca3af; margin-top: 2px; }
+        .fuel-container { width: 25px; height: 60px; background-color: var(--cat-light-grey); border-radius: 0.5rem; border: 2px solid var(--cat-light-grey); padding: 3px; margin: auto; }
+        .fuel-level { background: linear-gradient(to top, var(--cat-red-alert), var(--cat-yellow), var(--cat-green-ok)); border-radius: 0.25rem; width: 100%; height: 100%; transition: transform 0.5s ease-out; transform-origin: bottom; }
+        .status-indicator { font-size: 1rem; font-weight: 700; padding: 0.5rem 1rem; border-radius: 8px; text-align: center; }
+        .status-indicator.on { background-color: var(--cat-green-ok); color: var(--cat-white); }
+        .status-indicator.off { background-color: var(--cat-red-alert); color: var(--cat-white); }
+        .ignition-dot { width: 1rem; height: 1rem; border-radius: 50%; transition: background-color 0.3s ease; }
+        .ignition-dot.on { background-color: var(--cat-green-ok); }
+        .ignition-dot.off { background-color: var(--cat-light-grey); }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.85); display: flex; justify-content: center; align-items: center; z-index: 1000; opacity: 0; visibility: hidden; transition: opacity 0.3s ease; }
+        .modal-overlay.show { opacity: 1; visibility: visible; }
+        .modal-content { background-color: var(--cat-dark-grey); padding: 40px; border-radius: 16px; border-top: 8px solid var(--cat-red-alert); text-align: center; width: 90%; max-width: 600px; transform: scale(0.9); transition: transform 0.3s ease; }
+        .modal-overlay.show .modal-content { transform: scale(1); }
+        #modal-icon { font-size: 5rem; margin-bottom: 1rem; color: var(--cat-red-alert); }
+        #modal-message { font-size: 2.5rem; font-weight: 900; color: var(--cat-yellow); margin-bottom: 30px; display: block; line-height: 1.2; }
+        .modal-button { padding: 15px 30px; font-size: 1.2rem; font-weight: 700; border: 2px solid var(--cat-light-grey); border-radius: 8px; cursor: pointer; background-color: transparent; color: var(--cat-white); transition: all 0.2s ease; }
+        .modal-button.acknowledge { border-color: var(--cat-green-ok); }
+        .modal-button.acknowledge:hover { background-color: var(--cat-green-ok); }
+        .rounded-md { border-radius: 0.375rem; }
+        .w-full { width: 100%; }
+        .h-full { height: 100%; }
+        .object-cover { object-fit: cover; }
+    </style>
+</head>
+<body>
+    <div id="alert-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div id="modal-icon">⚠️</div>
+            <span id="modal-message">PROXIMITY BREACH</span>
+            <div style="display: flex; justify-content: center; gap: 20px;">
+                <button id="acknowledge-btn" class="modal-button acknowledge">Acknowledge</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <header class="header">
+            <div>
+                <h1 style="font-size: 1.5rem; font-weight: 900;" id="machine_id">--</h1>
+                <p style="font-size: 0.875rem;" id="operator_id_p">Operator: <span id="operator_id">--</span></p>
+            </div>
+            <div id="seatbelt_status" class="status-indicator">--</div>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div style="text-align: right;">
+                    <p style="font-size: 1.125rem; font-weight: 600;" id="current_time">--:--:--</p>
+                    <p style="font-size: 0.75rem;" id="current_date">----------</p>
+                </div>
+                <div id="ignition_indicator" class="ignition-dot off" title="Ignition Off"></div>
+            </div>
+        </header>
+        <main style="display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1rem;">
+            <div class="widget">
+                <div class="widget-title">System Status</div>
+                <div style="flex-grow: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: center; text-align: center;">
+                    <div>
+                        <svg class="gauge" viewBox="0 0 100 60">
+                            <defs><linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#27ae60" /><stop offset="50%" stop-color="#FFD100" /><stop offset="100%" stop-color="#e60023" /></linearGradient></defs>
+                            <path d="M10 50 A 40 40 0 0 1 90 50" stroke="url(#grad1)" stroke-width="10" fill="none" stroke-linecap="round"/>
+                            <g id="engine_temp_needle"><path d="M50 50 L 50 15" stroke="white" stroke-width="2" stroke-linecap="round"/></g>
+                        </svg>
+                        <div style="margin-top: 0.25rem;"><span id="engine_temp" class="gauge-text">--</span><span class="gauge-unit">&deg;C</span></div>
+                        <p class="gauge-label">Eng. Temp</p>
+                    </div>
+                    <div>
+                        <div class="fuel-container"><div class="fuel-level" id="fuel_level_bar"></div></div>
+                        <div style="margin-top: 0.25rem;"><span id="fuel_percent" class="gauge-text">--</span><span class="gauge-unit">%</span></div>
+                        <p class="gauge-label">Fuel</p>
+                    </div>
+                    <div style="margin-top: 0.5rem;">
+                        <p class="gauge-label">Engine Hours</p>
+                        <p style="font-size: 1.125rem; font-weight: 700;" id="engine_hours">--</p>
+                    </div>
+                    <div style="margin-top: 0.5rem;">
+                        <p class="gauge-label">Idling</p>
+                        <p style="font-size: 1.125rem; font-weight: 700;" id="is_idling">--</p>
+                    </div>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-rows: 1fr 1fr; gap: 1rem;">
+                <div class="widget">
+                    <div class="widget-title">Environment</div>
+                    <div style="flex-grow: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; align-items: center; text-align: center;">
+                        <div>
+                            <svg class="gauge" viewBox="0 0 100 60"><use href="#grad1" /><path d="M10 50 A 40 40 0 0 1 90 50" stroke="url(#grad1)" stroke-width="10" fill="none" stroke-linecap="round"/><g id="noise_db_needle"><path d="M50 50 L 50 15" stroke="white" stroke-width="2" stroke-linecap="round"/></g></svg>
+                            <div style="margin-top: 0.25rem;"><span id="noise_db" class="gauge-text">--</span><span class="gauge-unit">dB</span></div><p class="gauge-label">Noise</p>
+                        </div>
+                        <div>
+                            <svg class="gauge" viewBox="0 0 100 60"><use href="#grad1" /><path d="M10 50 A 40 40 0 0 1 90 50" stroke="url(#grad1)" stroke-width="10" fill="none" stroke-linecap="round"/><g id="dust_aqi_needle"><path d="M50 50 L 50 15" stroke="white" stroke-width="2" stroke-linecap="round"/></g></svg>
+                            <div style="margin-top: 0.25rem;"><span id="dust_aqi" class="gauge-text">--</span><span class="gauge-unit">AQI</span></div><p class="gauge-label">Dust</p>
+                        </div>
+                        <div>
+                            <svg class="gauge" viewBox="0 0 100 60"><use href="#grad1" /><path d="M10 50 A 40 40 0 0 1 90 50" stroke="url(#grad1)" stroke-width="10" fill="none" stroke-linecap="round"/><g id="air_quality_ppm_needle"><path d="M50 50 L 50 15" stroke="white" stroke-width="2" stroke-linecap="round"/></g></svg>
+                            <div style="margin-top: 0.25rem;"><span id="air_quality_ppm" class="gauge-text">--</span><span class="gauge-unit">PPM</span></div><p class="gauge-label">Air Quality</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="widget" style="display: flex; align-items: center; justify-content: center;">
+                    <div style="text-align: center;">
+                        <p class="widget-title" style="margin-bottom: 0.5rem;">Location</p>
+                        <p style="font-size: 1rem; font-weight: 600; line-height: 1.25;">Lat: <span id="gps_lat">--</span></p>
+                        <p style="font-size: 1rem; font-weight: 600; line-height: 1.25;">Lon: <span id="gps_lon">--</span></p>
+                    </div>
+                </div>
+            </div>
+            <div class="widget">
+                <div class="widget-title">Driver Camera</div>
+                <div style="flex-grow: 1; background-color: black; border-radius: 0.375rem;"></div>
+            </div>
+            <div class="widget" style="display: flex; align-items: center; justify-content: center;">
+                <div class="proximity-visualizer">
+                    <div class="excavator-icon">
+                        <svg style="width: 100%; height: 100%; color: #9ca3af;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>
+                    </div>
+                </div>
+            </div>
+        </main>
+        <aside style="display: grid; grid-template-rows: 1fr 1fr; gap: 1rem;">
+            <div class="widget schedule-widget">
+                <div class="widget-title">Today's Schedule</div>
+                <ul id="schedule-list" class="schedule-list"></ul>
+            </div>
+            <div class="widget">
+                <div class="widget-title">External Camera Feeds</div>
+                <div class="flex-grow" style="display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 0.5rem;">
+                    <img id="cam_front" class="rounded-md w-full h-full object-cover"><img id="cam_rear" class="rounded-md w-full h-full object-cover">
+                    <img id="cam_left" class="rounded-md w-full h-full object-cover"><img id="cam_right" class="rounded-md w-full h-full object-cover">
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        const BACKEND_API = "http://127.0.0.1:5000";
+        const SENSOR_IDS = [ "front_left", "front_right", "side_right_1", "side_right_2", "rear_right", "rear_left", "side_left_2", "side_left_1" ];
+        let isModalVisible = false;
+
+        const DEMO_OPERATOR_ID = 'OP1002';
+        const DEMO_MACHINE_ID = 'EXC001';
+        const DUMMY_SCHEDULE = [{
+            "assigned_date": "2025-07-18", "operator_id": "OP1002", "machine_id": "EXC001",
+            "task_type": "Trenching", "load_cycles_planned": 50,
+            "geofence_points": [ [76.9558, 11.0168], [76.9568, 11.0168], [76.9568, 11.0178], [76.9558, 11.0178], [76.9558, 11.0168] ],
+            "task_inputs": { "soil_type": "Clay", "terrain": "Slight Incline" }
+        }];
+
+        function updateElementText(id, value, defaultValue = '--') {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value !== undefined && value !== null ? value : defaultValue;
+        }
+        function updateDashboard(data) {
+            updateElementText('machine_id', data.identity?.machine_id);
+            updateElementText('operator_id', data.identity?.operator_id);
+            const ignitionEl = document.getElementById('ignition_indicator');
+            ignitionEl.className = `ignition-dot ${data.status?.ignition_on ? 'on' : 'off'}`;
+            updateElementText('engine_hours', data.status?.engine_hours?.toFixed(1));
+            updateElementText('is_idling', data.status?.is_idling ? 'YES' : 'NO');
+            const seatbeltEl = document.getElementById('seatbelt_status');
+            seatbeltEl.textContent = data.safety?.seatbelt_buckled ? 'SEATBELT ON' : 'SEATBELT OFF';
+            seatbeltEl.className = `status-indicator ${data.safety?.seatbelt_buckled ? 'on' : 'off'}`;
+            updateElementText('engine_temp', data.status?.engine_temperature_celsius?.toFixed(1));
+            updateGauge('engine_temp_needle', data.status?.engine_temperature_celsius, 50, 120);
+            updateElementText('fuel_percent', data.status?.fuel_percent);
+            document.getElementById('fuel_level_bar').style.transform = `scaleY(${data.status?.fuel_percent / 100})`;
+            updateElementText('noise_db', data.environment?.noise_db);
+            updateGauge('noise_db_needle', data.environment?.noise_db, 40, 110);
+            updateElementText('dust_aqi', data.environment?.dust_aqi);
+            updateGauge('dust_aqi_needle', data.environment?.dust_aqi, 0, 300);
+            updateElementText('air_quality_ppm', data.environment?.air_quality_ppm);
+            updateGauge('air_quality_ppm_needle', data.environment?.air_quality_ppm, 0, 100);
+            updateElementText('gps_lat', data.location?.gps?.latitude?.toFixed(4));
+            updateElementText('gps_lon', data.location?.gps?.longitude?.toFixed(4));
+            const prox_data = data.safety?.proximity_meters || {};
+            SENSOR_IDS.forEach((id) => {
+                const segment = document.getElementById(id);
+                const distance = prox_data[id];
+                if (segment && distance !== undefined) {
+                    const zone = distance < 3.0 ? "NEAR" : distance < 10.0 ? "MEDIUM" : "FAR";
+                    segment.className = 'sensor-segment'; segment.classList.add(`zone-${zone}`);
+                    segment.textContent = distance.toFixed(0);
+                }
+            });
+            const base_url = "http://127.0.0.1:5001";
+            const placeholder = "https://placehold.co/300x200/2b2b2b/444?text=No+Signal";
+            document.getElementById('cam_front').src = data.camera_feeds?.front ? base_url + data.camera_feeds.front : placeholder;
+            document.getElementById('cam_rear').src = data.camera_feeds?.rear ? base_url + data.camera_feeds.rear : placeholder;
+            document.getElementById('cam_left').src = data.camera_feeds?.left ? base_url + data.camera_feeds.left : placeholder;
+            document.getElementById('cam_right').src = data.camera_feeds?.right ? base_url + data.camera_feeds.right : placeholder;
+        }
+        function updateGauge(id, value, min, max) {
+            const needle = document.getElementById(id);
+            if (needle && value !== undefined) {
+                const angle = (value - min) / (max - min) * 180 - 90;
+                needle.style.transform = `rotate(${Math.max(-90, Math.min(90, angle))}deg)`;
+                needle.style.transformOrigin = '50px 50px';
+            }
+        }
+        function createProximityVisualizer() {
+            const container = document.querySelector('.proximity-visualizer');
+            const radius = 45;
+            SENSOR_IDS.forEach((id, index) => {
+                const angle = (index / SENSOR_IDS.length) * 2 * Math.PI - (Math.PI / 2);
+                const x = 50 + radius * Math.cos(angle);
+                const y = 50 + radius * Math.sin(angle);
+                const segment = document.createElement('div');
+                segment.id = id;
+                segment.className = 'sensor-segment';
+                segment.style.left = `calc(${x}% - 5%)`; segment.style.top = `calc(${y}% - 5%)`;
+                container.appendChild(segment);
+            });
+        }
+        function updateTime() {
+            const now = new Date();
+            updateElementText('current_time', now.toLocaleTimeString('en-GB'));
+            updateElementText('current_date', now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
+        }
+        function showModal(alert) {
+            if (isModalVisible) return;
+            isModalVisible = true;
+            document.getElementById('modal-message').textContent = alert.message;
+            document.getElementById('alert-modal').classList.add('show');
+        }
+        function hideModal() {
+            isModalVisible = false;
+            document.getElementById('alert-modal').classList.remove('show');
+        }
+
+        async function postData(endpoint, body) {
+            const response = await fetch(BACKEND_API + endpoint, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            if (!response.ok) throw new Error(`Failed to post to ${endpoint}`);
+            return response.json();
+        }
+
+        async function selectTask(taskElement, taskId) {
+            document.querySelectorAll('.schedule-item.active').forEach(el => el.classList.remove('active'));
+            taskElement.classList.add('active');
+            await postData('/api/set_task', { task_id: taskId });
+            console.log(`Active task set to ${taskId}`);
+        }
+
+        async function fetchData() {
+            if (isModalVisible) return;
+            try {
+                const response = await fetch(BACKEND_API + '/api/live_status');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+                if (data.live_data) updateDashboard(data.live_data);
+                if (data.alerts && data.alerts.length > 0) {
+                    showModal(data.alerts[0]);
+                }
+            } catch (error) {
+                console.error("Failed to fetch data:", error);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            createProximityVisualizer();
+            updateTime();
+            setInterval(updateTime, 1000);
+
+            try {
+                await postData('/api/login', { operator_id: DEMO_OPERATOR_ID, machine_id: DEMO_MACHINE_ID });
+                const scheduleResponse = await postData('/api/schedule', DUMMY_SCHEDULE);
+                const taskIds = scheduleResponse.task_ids;
+                const scheduleList = document.getElementById('schedule-list');
+                DUMMY_SCHEDULE.forEach((task, index) => {
+                    const li = document.createElement('li');
+                    li.className = 'schedule-item';
+                    li.textContent = `${task.task_type} (${task.load_cycles_planned} cycles)`;
+                    li.onclick = () => selectTask(li, taskIds[index]);
+                    scheduleList.appendChild(li);
+                });
+
+                if (scheduleList.firstChild) {
+                    scheduleList.firstChild.click();
+                }
+                setInterval(fetchData, 2000);
+
+            } catch (error) {
+                console.error("Startup sequence failed:", error);
+                alert("Could not initialize the application. Is the backend server running?");
+            }
+
+            document.getElementById('acknowledge-btn').onclick = hideModal;
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# nixpacks.toml
+
+[phases.setup]
+# Add the PostGIS package to the environment
+nixPkgs = ["...", "postgresql.pkgs.postgis"]

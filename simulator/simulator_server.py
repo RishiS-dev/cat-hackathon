@@ -13,7 +13,8 @@ sensor_data = {
         "ignition_on": True,
         "is_idling": False,
         "engine_hours": 435.2,
-        "fuel_percent": 65
+        "fuel_percent": 65,
+        "engine_temperature_celsius": 95.5 
     },
     "safety": {
         "seatbelt_buckled": True,
@@ -94,4 +95,3 @@ def update_data():
 if __name__ == '__main__':
     # We run on port 5001 to avoid conflicts with your main backend server
     app.run(host='0.0.0.0', port=5001, debug=True)
-    
