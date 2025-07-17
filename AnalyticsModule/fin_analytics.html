@@ -1,0 +1,215 @@
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Analytics Dashboard</title>
+        
+        <!-- 
+            CORRECTED PATH: 
+            Since analytics.html is inside the 'AnalyticsModule' folder, 
+            '../' goes UP one level to the root directory to find styles.css.
+        -->
+        <link rel="stylesheet" href="../styles.css">
+        
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <style>
+            /* Additional style for the operator selector, specific to this page */
+            .widget-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            #operatorSelector {
+                padding: 8px;
+                border-radius: 6px;
+                background-color: var(--cat-light-grey);
+                color: var(--cat-white);
+                border: 1px solid var(--cat-yellow);
+                font-size: 1rem;
+            }
+        </style>
+    </head>
+    <body>
+
+        <header class="page-header">
+            <h1>Analytics Dashboard</h1>
+        </header>
+
+        <div class="dashboard-container">
+            <div class="widget">
+                <div class="widget-header">
+                    <h2 class="widget-title">Operator Performance Fingerprint</h2>
+                    <select id="operatorSelector"></select>
+                </div>
+                <div class="chart-container">
+                    <canvas id="radarChart"></canvas>
+                </div>
+            </div>
+
+            <div class="widget">
+                <h2 class="widget-title">AI-Powered Operator Clusters</h2>
+                <div class="chart-container">
+                    <canvas id="scatterChart"></canvas>
+                </div>
+            </div>
+
+            <div class="widget" style="grid-column: 1 / -1;">
+                <h2 class="widget-title">Performance Breakdown vs. Site Average</h2>
+                <div class="chart-container">
+                    <canvas id="barChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // --- Global variables for charts and data ---
+            let radarChart, scatterChart, barChart;
+            let allOperatorData = [];
+            let siteAverage = {};
+
+            // --- Fetch data from our Python backend ---
+            try {
+                const response = await fetch('http://127.0.0.1:5001/api/profiler_data');
+                if (!response.ok) throw new Error('Network response was not ok.');
+                
+                const data = await response.json();
+                allOperatorData = data.operators;
+                siteAverage = data.site_average;
+                
+                // --- Initialize the dashboard ---
+                populateOperatorSelector();
+                createScatterChart();
+                createOrUpdateCharts(allOperatorData[0].id); // Load first operator by default
+
+            } catch (error) {
+                console.error("Failed to fetch data from backend:", error);
+                document.body.innerHTML = `<h1 style='color:red; text-align:center; margin-top: 50px;'>Error: Could not connect to the backend server. Is app.py running?</h1>`;
+            }
+
+            // --- Chart Creation and Update Functions ---
+
+            function populateOperatorSelector() {
+                const selector = document.getElementById('operatorSelector');
+                allOperatorData.forEach(op => {
+                    const option = document.createElement('option');
+                    option.value = op.id;
+                    option.textContent = op.id;
+                    selector.appendChild(option);
+                });
+                selector.addEventListener('change', (e) => {
+                    createOrUpdateCharts(e.target.value);
+                });
+            }
+            
+            function createOrUpdateCharts(operatorId) {
+                const operator = allOperatorData.find(op => op.id === operatorId);
+                if (!operator) return;
+                
+                updateRadarChart(operator);
+                updateBarChart(operator);
+            }
+
+            function createScatterChart() {
+                const scatterCtx = document.getElementById('scatterChart').getContext('2d');
+                const clusterColors = ['rgba(230, 0, 35, 0.8)', 'rgba(52, 152, 219, 0.8)', 'rgba(39, 174, 96, 0.8)'];
+                const clusterNames = ['Needs Coaching', 'Consistent', 'Top Tier'];
+
+                const datasets = clusterNames.map((name, i) => ({
+                    label: name,
+                    data: allOperatorData.filter(op => op.cluster === i).map(op => ({x: op.scatter_x, y: op.scatter_y})),
+                    backgroundColor: clusterColors[i]
+                }));
+
+                scatterChart = new Chart(scatterCtx, {
+                    type: 'scatter',
+                    data: { datasets },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: {
+                            x: { title: { display: true, text: 'Fuel Consumption (Higher is worse)', color: '#ccc' }, grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#ccc' } },
+                            y: { title: { display: true, text: 'Idling Ratio (Higher is worse)', color: '#ccc' }, grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#ccc' } }
+                        },
+                        plugins: { legend: { labels: { color: '#FFFFFF' } } }
+                    }
+                });
+            }
+
+            function updateRadarChart(operator) {
+                const chartData = {
+                    labels: ['Fuel Efficiency', 'Low Idling', 'Safety Record'],
+                    datasets: [{
+                        label: operator.id,
+                        data: [operator.fuel_efficiency_score, operator.low_idling_score, operator.safety_score],
+                        backgroundColor: 'rgba(255, 209, 0, 0.4)', borderColor: 'rgba(255, 209, 0, 1)', borderWidth: 2
+                    }, {
+                        label: 'Site Average',
+                        data: [siteAverage.fuel_efficiency_score, siteAverage.low_idling_score, siteAverage.safety_score],
+                        backgroundColor: 'rgba(255, 255, 255, 0.2)', borderColor: 'rgba(255, 255, 255, 0.5)', borderWidth: 1
+                    }]
+                };
+
+                if (radarChart) {
+                    radarChart.data = chartData;
+                    radarChart.update();
+                } else {
+                    const radarCtx = document.getElementById('radarChart').getContext('2d');
+                    radarChart = new Chart(radarCtx, {
+                        type: 'radar', data: chartData,
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            scales: { r: { min: 0, max: 110, ticks: {color: '#fff', backdropColor: 'transparent'}, grid: {color: 'rgba(255,255,255,0.2)'}, pointLabels: {color: '#fff'} } },
+                            plugins: { legend: { labels: { color: '#FFFFFF' } } }
+                        }
+                    });
+                }
+            }
+            
+            function updateBarChart(operator) {
+                const operatorScores = [operator.fuel_efficiency_score, operator.low_idling_score, operator.safety_score];
+                const averageScores = [siteAverage.fuel_efficiency_score, siteAverage.low_idling_score, siteAverage.safety_score];
+                
+                const backgroundColors = operatorScores.map((score, i) => {
+                    return score >= averageScores[i] ? 'rgba(39, 174, 96, 0.7)' : 'rgba(230, 0, 35, 0.7)';
+                });
+
+                const chartData = {
+                    labels: ['Fuel Efficiency', 'Low Idling Score', 'Safety Score'],
+                    datasets: [{
+                        label: operator.id,
+                        data: operatorScores,
+                        backgroundColor: backgroundColors,
+                        borderColor: '#FFFFFF',
+                        borderWidth: 1
+                    }, {
+                        label: 'Site Average',
+                        data: averageScores,
+                        backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                        borderColor: 'rgba(255, 255, 255, 0.5)',
+                        borderWidth: 1
+                    }]
+                };
+
+                if (barChart) {
+                    barChart.data = chartData;
+                    barChart.update();
+                } else {
+                    const barCtx = document.getElementById('barChart').getContext('2d');
+                    barChart = new Chart(barCtx, {
+                        type: 'bar', data: chartData,
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            scales: {
+                                y: { beginAtZero: true, max: 110, grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#ccc' } },
+                                x: { grid: { display: false }, ticks: { color: '#ccc', font: { size: 14 } } }
+                            },
+                            plugins: { legend: { position: 'top', labels: { color: '#FFFFFF' } } }
+                        }
+                    });
+                }
+            }
+        });
+        </script>
+    </body>
+    </html>
