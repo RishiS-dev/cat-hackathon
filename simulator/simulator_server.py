@@ -18,9 +18,9 @@ sensor_data = {
     "safety": {
         "seatbelt_buckled": True,
         "proximity_meters": {
-            "front_left": 15.0,
+            "front_left": 1.0,
             "front_right": 15.0,
-            "side_left_1": 12.5,
+            "side_left_1": 4.5,
             "side_left_2": 12.5,
             "side_right_1": 12.5,
             "side_right_2": 12.5,
