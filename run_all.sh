@@ -39,8 +39,8 @@ python3 backend_server.py &
 python3 simulator/simulator_server.py &
 python3 AnalyticsModule/analytics_server.py &
 python3 incident_logging/app.py &
-python3 "python learning assisstant/assistant_server.py" &
-# python3 Companion/companion_server.py &
+python3 python_learning_assisstant/assistant_server.py &
+python3 Companion/companion_server.py &
 
 echo "✅ All servers launched. Their logs will appear in this terminal."
 echo "To stop them all, close this terminal window."

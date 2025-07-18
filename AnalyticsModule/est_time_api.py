@@ -133,4 +133,4 @@ def predict_task_duration():
 if __name__ == '__main__':
     # Set host to '0.0.0.0' to make the API accessible from other machines on the network.
     # Use a standard port like 5001 to avoid conflicts with other services.
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run(host='0.0.0.0', port=5002, debug=True)

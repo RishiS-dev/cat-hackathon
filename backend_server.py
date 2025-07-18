@@ -14,16 +14,15 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 active_shift = { "shift_id": None, "task_id": None, "geofence_wkt": None }
 
 # --- API Endpoints Configuration ---
-ML_API_ENDPOINT = "http://127.0.0.1:5002/predict/task_duration" # ML model runs on port 5002
 SIMULATOR_API_ENDPOINT = "http://127.0.0.1:5001/get_current_data"
+ANALYTICS_API_BASE = "http://127.0.0.1:5002/api"
 
-# --- Database Configuration ---
+# --- Database Configuration & Connection ---
 DB_CONFIG = {
     "dbname": os.getenv("DB_NAME"), "user": os.getenv("DB_USER"),
     "password": os.getenv("DB_PASSWORD"), "host": os.getenv("DB_HOST"),
     "port": os.getenv("DB_PORT")
 }
-
 def get_db_connection():
     return psycopg2.connect(**DB_CONFIG)
 
@@ -34,6 +33,7 @@ ALERT_THRESHOLDS = {
 }
 
 # --- API Endpoints ---
+
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -76,6 +76,26 @@ def post_schedule():
     conn.close()
     return jsonify({"message": f"{len(tasks)} tasks scheduled.", "task_ids": task_ids}), 201
 
+# --- THIS IS THE MISSING FUNCTION THAT CAUSED THE ERROR ---
+@app.route('/api/schedule', methods=['GET'])
+def get_schedule():
+    """
+    Fetches all scheduled tasks from the database.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute("SELECT * FROM scheduled_tasks ORDER BY task_id;")
+    tasks = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    # Remove the complex geofence data before sending as JSON
+    for task in tasks:
+        if 'geofence' in task:
+            del task['geofence']
+            
+    return jsonify(tasks)
+
 @app.route('/api/predict_time', methods=['GET'])
 def predict_time():
     task_id = request.args.get('task_id', type=int)
@@ -90,12 +110,11 @@ def predict_time():
 
     if not task_data: return jsonify({"error": "Task not found"}), 404
 
-    # Construct the payload for the ML model API
-    task_inputs = task_data['task_inputs']
+    task_inputs = task_data['task_inputs'] or {}
     ml_payload = {
         "Machine_ID": task_data['machine_id'],
         "Operator_ID": task_data['operator_id'],
-        "RPM": task_inputs.get('average_rpm', 1800), # Use a default if not provided
+        "RPM": task_inputs.get('average_rpm', 1800),
         "Task_Type": task_data['task_type'],
         "Soil_Type": task_inputs.get('soil_type'),
         "Terrain": task_inputs.get('terrain'),
@@ -105,48 +124,57 @@ def predict_time():
     }
 
     try:
-        # Call the external ML model API
-        ml_response = requests.post(ML_API_ENDPOINT, json=ml_payload, timeout=5)
+        ml_response = requests.post(f"{ANALYTICS_API_BASE}/estimate_time", json=ml_payload, timeout=5)
         ml_response.raise_for_status()
         prediction_data = ml_response.json()
-        
-        # Return the prediction to the frontend
         return jsonify({
             "task_id": task_id,
             "predicted_duration_hours": prediction_data.get('predicted_duration_hours')
         })
     except requests.RequestException as e:
-        print(f"Error calling ML API: {e}")
-        return jsonify({"error": "Failed to get prediction from ML model."}), 503
+        return jsonify({"error": f"ML API connection error: {e}"}), 503
 
 @app.route('/api/live_status', methods=['GET'])
 def get_live_status():
-    # ... (This function remains the same as before)
     if not active_shift["shift_id"]:
-        return jsonify({"error": "No active shift. Please login first."}), 400
+        return jsonify({"error": "No active shift"}), 400
+
     try:
         sim_response = requests.get(SIMULATOR_API_ENDPOINT)
         sim_response.raise_for_status()
         sensor_data = sim_response.json()
     except requests.RequestException:
-        return jsonify({"error": "Could not connect to simulator."}), 500
+        return jsonify({"error": "Simulator connection failed."}), 500
+
     conn = get_db_connection()
     cur = conn.cursor()
     new_alerts = []
+    
     try:
         if any(p < ALERT_THRESHOLDS["PROXIMITY_NEAR"] for p in sensor_data['safety']['proximity_meters'].values()):
             new_alerts.append({"type": "PROXIMITY_NEAR", "message": "Proximity Breach! Object too close."})
-        if sensor_data['environment']['noise_db'] > ALERT_THRESHOLDS["HIGH_NOISE"]:
-            new_alerts.append({"type": "HIGH_NOISE", "message": "Noise levels exceed safety threshold."})
-        if active_shift["geofence_wkt"]:
-            cur.execute(
-                "SELECT NOT ST_Contains(ST_GeomFromText(%s, 4326), ST_SetSRID(ST_MakePoint(%s, %s), 4326));",
-                (active_shift['geofence_wkt'], sensor_data['location']['gps']['longitude'], sensor_data['location']['gps']['latitude'])
-            )
-            if cur.fetchone()[0]:
-                new_alerts.append({"type": "GEOFENCE_BREACH", "message": "Machine is outside designated work area."})
+        
+        try:
+            health_payload = {
+                'RPM': sensor_data['status']['engine_rpm'],
+                'Engine_Hours': sensor_data['status']['engine_hours'],
+                'Fuel_Used': sensor_data['status']['fuel_percent'],
+                'Load_Cycles': 0, 
+                'Idling_Time': 1 if sensor_data['status']['is_idling'] else 0,
+                'Temperature_C': sensor_data['status']['engine_temperature_celsius'],
+                'Precipitation_mm': 0
+            }
+            health_response = requests.post(f"{ANALYTICS_API_BASE}/check_health", json=health_payload, timeout=3)
+            if health_response.ok:
+                health_data = health_response.json()
+                if health_data.get("is_anomaly"):
+                    new_alerts.append({"type": "MACHINE_ANOMALY", "message": health_data.get("actionable_insight")})
+        except requests.RequestException as e:
+            print(f"Could not connect to machine health API: {e}")
+        
         for alert in new_alerts:
-            cur.execute("INSERT INTO events (shift_id, event_type, details) VALUES (%s, %s, %s);", (active_shift['shift_id'], alert['type'], psycopg2.extras.Json(alert)))
+            cur.execute( "INSERT INTO events (shift_id, event_type, details) VALUES (%s, %s, %s);", (active_shift['shift_id'], alert['type'], psycopg2.extras.Json(alert)))
+        
         conn.commit()
     except Exception as e:
         print(f"Database Error: {e}")
@@ -154,11 +182,11 @@ def get_live_status():
     finally:
         cur.close()
         conn.close()
+
     return jsonify({"live_data": sensor_data, "alerts": new_alerts})
 
 @app.route('/api/set_task', methods=['POST'])
 def set_task():
-    # ... (This function remains the same as before)
     data = request.get_json()
     task_id = data.get('task_id')
     conn = get_db_connection()
@@ -173,37 +201,6 @@ def set_task():
     cur.close()
     conn.close()
     return jsonify({"message": f"Active task set to {task_id}"})
-
-@app.route('/api/analytics/operator_summary', methods=['GET'])
-def get_operator_summary():
-    """
-    Queries the database to get a summary of events for each operator.
-    """
-    conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    
-    # This SQL query joins the tables and counts events for each operator
-    query = """
-        SELECT
-            op.operator_id,
-            op.name,
-            COUNT(ev.event_id) AS total_alerts,
-            SUM(CASE WHEN ev.event_type = 'PROXIMITY_NEAR' THEN 1 ELSE 0 END) AS proximity_alerts,
-            SUM(CASE WHEN ev.event_type = 'GEOFENCE_BREACH' THEN 1 ELSE 0 END) AS geofence_breaches
-        FROM operators op
-        LEFT JOIN work_shifts ws ON op.operator_id = ws.operator_id
-        LEFT JOIN events ev ON ws.shift_id = ev.shift_id
-        GROUP BY op.operator_id, op.name
-        ORDER BY total_alerts DESC;
-    """
-    
-    cur.execute(query)
-    summary_data = [dict(row) for row in cur.fetchall()]
-    
-    cur.close()
-    conn.close()
-    
-    return jsonify(summary_data)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
