@@ -8,8 +8,9 @@ import json
 bp = Blueprint(
     'main',
     __name__,
-    static_folder='static',       # Tell Flask where to find CSS/JS
-    template_folder='templates'   # Explicitly define template path too
+    static_folder='static',
+    static_url_path='/static',  # <-- THIS IS THE FIX!
+    template_folder='templates'
 )
 
 OPERATOR_NAME = "Sharun"
