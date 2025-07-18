@@ -1,26 +1,17 @@
 import os
 import psycopg2
-import psycopg2.extras # Needed for JSONB
+import psycopg2.extras
 import requests
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
-from flask_cors import CORS # Make sure this is installed: pip install Flask-Cors
+from flask_cors import CORS
 
 # --- Initialization ---
 load_dotenv()
 app = Flask(__name__)
-
-# --- ROBUST CORS SETUP ---
-# This is a more explicit and reliable way to handle CORS.
-# It tells the server to allow all origins ('*') to access all API routes.
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# In-memory store for the demo's active session state
-active_shift = {
-    "shift_id": None,
-    "task_id": None,
-    "geofence_wkt": None # Well-Known Text format for the polygon
-}
+active_shift = { "shift_id": None, "task_id": None, "geofence_wkt": None }
 
 # --- Database Configuration ---
 DB_CONFIG = {
@@ -32,20 +23,33 @@ DB_CONFIG = {
 def get_db_connection():
     return psycopg2.connect(**DB_CONFIG)
 
-# --- Alert Thresholds ---
-ALERT_THRESHOLDS = {
-    "PROXIMITY_NEAR": 3.0,
-    "HIGH_NOISE": 90.0,
-    "HIGH_AQI": 200.0,
-    "HIGH_ENGINE_TEMP": 115.0
-}
+# --- ML Model Simulation (Updated) ---
+def simulate_ml_prediction(task_data):
+    """Fake ML model with updated features."""
+    base_time_per_cycle = 1.5 # minutes
+    
+    # Operator Persona Factor (instead of experience years)
+    operator_factors = {"OP1001": 1.0, "OP1002": 0.9, "OP1003": 1.2, "OP1004": 0.85, "OP1005": 1.1}
+    operator_factor = operator_factors.get(task_data['operator_id'], 1.0)
+
+    # Categorical Factors
+    soil_factors = {"Clay": 1.2, "Rock": 1.5, "Sand": 0.9, "Loam": 1.0, "Gravel": 1.1}
+    terrain_factors = {"Steep": 1.3, "Incline": 1.1, "Flat": 1.0}
+    
+    task_inputs = task_data['task_inputs']
+    soil_factor = soil_factors.get(task_inputs.get('soil_type'), 1.0)
+    terrain_factor = terrain_factors.get(task_inputs.get('terrain'), 1.0)
+    
+    # Assume RPM is an average planned RPM for the task, passed in task_inputs
+    avg_rpm = task_inputs.get('average_rpm', 1800)
+    rpm_factor = 1800 / avg_rpm # Higher RPM = faster work (simplistic model)
+
+    estimated_time = (
+        task_data['load_cycles_planned'] * base_time_per_cycle * operator_factor * soil_factor * terrain_factor * rpm_factor
+    )
+    return round(estimated_time)
 
 # --- API Endpoints ---
-@app.route('/')
-def index():
-    # A simple test route to confirm the server is running
-    return "Backend server is running!"
-
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -88,6 +92,58 @@ def post_schedule():
     conn.close()
     return jsonify({"message": f"{len(tasks)} tasks scheduled.", "task_ids": task_ids}), 201
 
+@app.route('/api/predict_time', methods=['GET'])
+def predict_time():
+    task_id = request.args.get('task_id', type=int)
+    if not task_id: return jsonify({"error": "task_id is required"}), 400
+    
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute("SELECT * FROM scheduled_tasks WHERE task_id = %s;", (task_id,))
+    task_data = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not task_data: return jsonify({"error": "Task not found"}), 404
+
+    estimated_minutes = simulate_ml_prediction(task_data)
+    return jsonify({"task_id": task_id, "estimated_minutes": estimated_minutes})
+
+
+@app.route('/api/live_status', methods=['GET'])
+def get_live_status():
+    if not active_shift["shift_id"]:
+        return jsonify({"error": "No active shift. Please login first."}), 400
+
+    try:
+        sim_response = requests.get("http://127.0.0.1:5001/get_current_data")
+        sim_response.raise_for_status()
+        sensor_data = sim_response.json()
+    except requests.RequestException:
+        return jsonify({"error": "Could not connect to simulator."}), 500
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    new_alerts = [] # Placeholder for alert logic
+    try:
+        cur.execute(
+            """INSERT INTO sensor_logs (shift_id, location, engine_rpm) 
+               VALUES (%s, ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s);""",
+            (
+                active_shift['shift_id'], sensor_data['location']['gps']['longitude'], 
+                sensor_data['location']['gps']['latitude'], sensor_data['status']['engine_rpm']
+            )
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"Error during logging: {e}")
+        conn.rollback()
+    finally:
+        cur.close()
+        conn.close()
+
+    return jsonify({"live_data": sensor_data, "alerts": new_alerts})
+
 @app.route('/api/set_task', methods=['POST'])
 def set_task():
     data = request.get_json()
@@ -105,54 +161,6 @@ def set_task():
     conn.close()
     return jsonify({"message": f"Active task set to {task_id}"})
 
-@app.route('/api/live_status', methods=['GET'])
-def get_live_status():
-    if not active_shift["shift_id"]:
-        return jsonify({"error": "No active shift. Please login first."}), 400
-
-    try:
-        sim_response = requests.get("http://127.0.0.1:5001/get_current_data")
-        sim_response.raise_for_status()
-        sensor_data = sim_response.json()
-    except requests.RequestException:
-        return jsonify({"error": "Could not connect to simulator."}), 500
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-    new_alerts = []
-
-    try:
-        if any(p < ALERT_THRESHOLDS["PROXIMITY_NEAR"] for p in sensor_data['safety']['proximity_meters'].values()):
-            new_alerts.append({"type": "PROXIMITY_NEAR", "message": "Proximity Breach! Object too close."})
-        if sensor_data['environment']['noise_db'] > ALERT_THRESHOLDS["HIGH_NOISE"]:
-            new_alerts.append({"type": "HIGH_NOISE", "message": "Noise levels exceed safety threshold."})
-        if sensor_data['environment']['dust_aqi'] > ALERT_THRESHOLDS["HIGH_AQI"]:
-            new_alerts.append({"type": "HIGH_AQI", "message": "Air quality hazardous. High dust levels."})
-        if sensor_data['status']['engine_temperature_celsius'] > ALERT_THRESHOLDS["HIGH_ENGINE_TEMP"]:
-            new_alerts.append({"type": "HIGH_ENGINE_TEMP", "message": "Engine temperature critical!"})
-
-        if active_shift["geofence_wkt"]:
-            cur.execute(
-                "SELECT NOT ST_Contains(ST_GeomFromText(%s, 4326), ST_SetSRID(ST_MakePoint(%s, %s), 4326));",
-                (active_shift['geofence_wkt'], sensor_data['location']['gps']['longitude'], sensor_data['location']['gps']['latitude'])
-            )
-            if cur.fetchone()[0]:
-                new_alerts.append({"type": "GEOFENCE_BREACH", "message": "Machine is outside designated work area."})
-
-        for alert in new_alerts:
-            cur.execute(
-                "INSERT INTO events (shift_id, event_type, details) VALUES (%s, %s, %s);",
-                (active_shift['shift_id'], alert['type'], psycopg2.extras.Json(alert))
-            )
-        conn.commit()
-    except Exception as e:
-        print(f"Database Error: {e}")
-        conn.rollback()
-    finally:
-        cur.close()
-        conn.close()
-
-    return jsonify({"live_data": sensor_data, "alerts": new_alerts})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
