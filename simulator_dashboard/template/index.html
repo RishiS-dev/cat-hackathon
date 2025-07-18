@@ -139,8 +139,10 @@
             </div>
             <div class="widget">
                 <div class="widget-title">Driver Camera</div>
-                <div style="flex-grow: 1; background-color: black; border-radius: 0.375rem;"></div>
-            </div>
+                    <img src="{{ url_for('fatigue_video_feed') }}" 
+                         alt="Driver Camera Feed" 
+                         style="width: 100%; height: auto; object-fit: cover; border-radius: 0.375rem;">
+                </div>
             <div class="widget" style="display: flex; align-items: center; justify-content: center;">
                 <div class="proximity-visualizer">
                     <div class="excavator-icon">

@@ -3,13 +3,17 @@ import psycopg2
 import psycopg2.extras
 import requests
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template, Response
 from flask_cors import CORS
+import cv2
+from fatigue_detector import FatigueDetector
 
 # --- Initialization ---
 load_dotenv()
-app = Flask(__name__)
+app = Flask(__name__, template_folder='simulator_dashboard/template')
 CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+detector = FatigueDetector()
 
 active_shift = { "shift_id": None, "task_id": None, "geofence_wkt": None }
 
@@ -27,11 +31,36 @@ DB_CONFIG = {
 def get_db_connection():
     return psycopg2.connect(**DB_CONFIG)
 
+# --- Route to serve the main dashboard UI ---
+@app.route('/')
+def index():
+    return render_template('index.html')
+
 # --- Alert Thresholds ---
 ALERT_THRESHOLDS = {
     "PROXIMITY_NEAR": 3.0, "HIGH_NOISE": 90.0,
     "HIGH_AQI": 200.0, "HIGH_ENGINE_TEMP": 115.0
 }
+
+# --- Video Streaming ---
+def gen_fatigue_frames():
+    camera = cv2.VideoCapture(0)
+    while True:
+        success, frame = camera.read()
+        if not success:
+            break
+        processed_frame = detector.process_frame(frame)
+        ret, buffer = cv2.imencode('.jpg', processed_frame)
+        if not ret:
+            continue
+        frame_bytes = buffer.tobytes()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+@app.route('/fatigue_video_feed')
+def fatigue_video_feed():
+    return Response(gen_fatigue_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
 
 # --- API Endpoints ---
 @app.route('/api/login', methods=['POST'])
