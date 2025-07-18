@@ -20,8 +20,9 @@
         .widget { background-color: var(--cat-dark-grey); border-radius: 12px; padding: 1rem; border-top: 4px solid var(--cat-yellow); box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; }
         .widget-title { font-size: 0.9rem; font-weight: 700; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px; color: var(--cat-yellow); }
         .schedule-widget .schedule-list { list-style: none; display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 1rem; }
-        .schedule-widget .schedule-item { background-color: var(--cat-light-grey); padding: 0.75rem; border-radius: 6px; font-size: 0.9rem; flex-shrink: 0; width: 180px; cursor: pointer; border: 2px solid transparent; }
-        .schedule-widget .schedule-item.active { border-color: var(--cat-yellow); }
+        .schedule-widget .schedule-item { background-color: var(--cat-light-grey); padding: 0.75rem; border-radius: 8px; font-size: 0.9rem; flex-shrink: 0; width: 190px; cursor: pointer; border: 2px solid transparent; display: flex; flex-direction: column; justify-content: space-between; transition: all 0.2s ease-in-out; }
+        .schedule-widget .schedule-item:hover { transform: translateY(-3px); border-color: rgba(252, 211, 3, 0.5); }
+        .schedule-widget .schedule-item.active { border-color: var(--cat-yellow); transform: translateY(-3px); box-shadow: 0 4px 15px rgba(252, 211, 3, 0.2); }
         .proximity-visualizer { position: relative; width: 240px; height: 240px; margin: auto; }
         .excavator-icon { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 33%; height: 33%; background-color: var(--cat-light-grey); border: 2px solid var(--cat-yellow); border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; }
         .sensor-segment { position: absolute; width: 10%; height: 10%; background-color: var(--cat-light-grey); border-radius: 50%; transition: background-color 0.3s ease, transform 0.3s ease; display: flex; align-items: center; justify-content: center; font-size: 0.4rem; font-weight: 700; color: var(--cat-white); transform-origin: center; border: 1px solid var(--cat-black); }
@@ -171,12 +172,33 @@
 
         const DEMO_OPERATOR_ID = 'OP1002';
         const DEMO_MACHINE_ID = 'EXC001';
-        const DUMMY_SCHEDULE = [{
-            "assigned_date": "2025-07-18", "operator_id": "OP1002", "machine_id": "EXC001",
-            "task_type": "Trenching", "load_cycles_planned": 50,
-            "geofence_points": [ [76.9558, 11.0168], [76.9568, 11.0168], [76.9568, 11.0178], [76.9558, 11.0178], [76.9558, 11.0168] ],
-            "task_inputs": { "soil_type": "Clay", "terrain": "Slight Incline" }
-        }];
+        
+        const DEMO_SCHEDULE_DATA = [
+            {
+                task_type: "Trenching",
+                details: "50 Cycles | Clay Soil",
+                estimated_hours: 3.0,
+                task_inputs: { soil_type: "Clay", terrain: "Flat" }
+            },
+            {
+                task_type: "Hauling",
+                details: "35 Cycles | Gravel",
+                estimated_hours: 2.5,
+                task_inputs: { soil_type: "Gravel", terrain: "Incline" }
+            },
+            {
+                task_type: "Grading",
+                details: "Site North | Flat",
+                estimated_hours: 4.1,
+                task_inputs: { soil_type: "Loam", terrain: "Flat" }
+            },
+            {
+                task_type: "Compacting",
+                details: "20 Cycles | Loam",
+                estimated_hours: 1.8,
+                task_inputs: { soil_type: "Loam", terrain: "Slight Incline" }
+            }
+        ];
 
         function updateElementText(id, value, defaultValue = '--') {
             const el = document.getElementById(id);
@@ -261,10 +283,13 @@
 
         async function postData(endpoint, body) {
             const response = await fetch(BACKEND_API + endpoint, {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(body)
             });
-            if (!response.ok) throw new Error(`Failed to post to ${endpoint}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             return response.json();
         }
 
@@ -281,6 +306,10 @@
                 const response = await fetch(BACKEND_API + '/api/live_status');
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 const data = await response.json();
+                if (data.error) {
+                    console.error("Backend returned an error:", data.error);
+                    return;
+                }
                 if (data.live_data) updateDashboard(data.live_data);
                 if (data.alerts && data.alerts.length > 0) {
                     showModal(data.alerts[0]);
@@ -296,26 +325,59 @@
             setInterval(updateTime, 1000);
 
             try {
+                // 1. Login to the backend to start a shift
                 await postData('/api/login', { operator_id: DEMO_OPERATOR_ID, machine_id: DEMO_MACHINE_ID });
-                const scheduleResponse = await postData('/api/schedule', DUMMY_SCHEDULE);
-                const taskIds = scheduleResponse.task_ids;
+                console.log("Login successful.");
+                
+                // 2. Format the demo data for the /api/schedule endpoint
+                const tasksToSchedule = DEMO_SCHEDULE_DATA.map(item => ({
+                    assigned_date: new Date().toISOString().split('T')[0],
+                    operator_id: DEMO_OPERATOR_ID,
+                    machine_id: DEMO_MACHINE_ID,
+                    task_type: item.task_type,
+                    load_cycles_planned: parseInt(item.details.split(' ')[0]) || 0,
+                    // geofence_points: [ [0,0], [0,1], [1,1], [1,0], [0,0] ], // Dummy geofence for backend
+                    geofence_points: [ [76.9558, 11.0168], [76.9568, 11.0168], [76.9568, 11.0178], [76.9558, 11.0178], [76.9558, 11.0168] ], // Real geofence for backend
+                    task_inputs: item.task_inputs
+                }));
+
+                // 3. Post the schedule to the backend to create real tasks
+                const scheduleResponse = await postData('/api/schedule', tasksToSchedule);
+                const realTaskIds = scheduleResponse.task_ids;
+                console.log("Successfully scheduled demo tasks with IDs:", realTaskIds);
+
+                // 4. Render the schedule UI using the original demo data and the REAL task IDs
                 const scheduleList = document.getElementById('schedule-list');
-                DUMMY_SCHEDULE.forEach((task, index) => {
+                DEMO_SCHEDULE_DATA.forEach((item, index) => {
                     const li = document.createElement('li');
                     li.className = 'schedule-item';
-                    li.textContent = `${task.task_type} (${task.load_cycles_planned} cycles)`;
-                    li.onclick = () => selectTask(li, taskIds[index]);
+                    const realTaskId = realTaskIds[index]; // Use the real ID from the backend response
+                    
+                    const durationText = `${item.estimated_hours.toFixed(1)} hrs est.`;
+
+                    li.innerHTML = `
+                        <div style="flex-grow: 1;">
+                            <div style="font-weight: 700; font-size: 1rem; margin-bottom: 0.25rem;">${item.task_type}</div>
+                            <div style="font-size: 0.8rem; color: #ccc;">${item.details}</div>
+                        </div>
+                        <div style="font-size: 0.85rem; font-weight: 700; color: var(--cat-yellow); margin-top: 0.5rem;">${durationText}</div>
+                    `;
+
+                    li.onclick = () => selectTask(li, realTaskId); // Pass the REAL ID to selectTask
                     scheduleList.appendChild(li);
                 });
 
+                // 5. Select the first task by default
                 if (scheduleList.firstChild) {
                     scheduleList.firstChild.click();
                 }
+                
+                // 6. Start polling for live data
                 setInterval(fetchData, 2000);
 
             } catch (error) {
                 console.error("Startup sequence failed:", error);
-                alert("Could not initialize the application. Is the backend server running?");
+                alert("Could not initialize the application. Is the backend server running and accessible?");
             }
 
             document.getElementById('acknowledge-btn').onclick = hideModal;
