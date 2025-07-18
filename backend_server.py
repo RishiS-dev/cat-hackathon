@@ -174,5 +174,36 @@ def set_task():
     conn.close()
     return jsonify({"message": f"Active task set to {task_id}"})
 
+@app.route('/api/analytics/operator_summary', methods=['GET'])
+def get_operator_summary():
+    """
+    Queries the database to get a summary of events for each operator.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    
+    # This SQL query joins the tables and counts events for each operator
+    query = """
+        SELECT
+            op.operator_id,
+            op.name,
+            COUNT(ev.event_id) AS total_alerts,
+            SUM(CASE WHEN ev.event_type = 'PROXIMITY_NEAR' THEN 1 ELSE 0 END) AS proximity_alerts,
+            SUM(CASE WHEN ev.event_type = 'GEOFENCE_BREACH' THEN 1 ELSE 0 END) AS geofence_breaches
+        FROM operators op
+        LEFT JOIN work_shifts ws ON op.operator_id = ws.operator_id
+        LEFT JOIN events ev ON ws.shift_id = ev.shift_id
+        GROUP BY op.operator_id, op.name
+        ORDER BY total_alerts DESC;
+    """
+    
+    cur.execute(query)
+    summary_data = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    return jsonify(summary_data)
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
