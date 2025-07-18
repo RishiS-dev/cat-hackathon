@@ -5,7 +5,12 @@ from services.parser import parse_incident_text
 from services.tts import text_to_speech_elevenlabs # Import the new service
 import json
 
-bp = Blueprint('main', __name__)
+bp = Blueprint(
+    'main',
+    __name__,
+    static_folder='static',       # Tell Flask where to find CSS/JS
+    template_folder='templates'   # Explicitly define template path too
+)
 
 OPERATOR_NAME = "Sharun"
 MACHINE_ID = "CAT-797F-451"

@@ -1,163 +1,81 @@
-/* --- Google Font --- */
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700;900&display=swap');
-
-/* --- Global Styles & CAT Color Palette --- */
 :root {
-    --cat-yellow: #FFD100;
+    --cat-yellow: #FCD303;
     --cat-black: #1a1a1a;
     --cat-dark-grey: #2b2b2b;
     --cat-light-grey: #444;
     --cat-white: #FFFFFF;
     --cat-red-alert: #e60023;
     --cat-green-ok: #27ae60;
-    --cat-blue-info: #3498db;
-}
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
 }
 
 body {
     font-family: 'Roboto', sans-serif;
     background-color: var(--cat-black);
     color: var(--cat-white);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 20px;
-    min-height: 100vh;
+    margin: 0;
+    padding: 2rem;
 }
 
-/* --- Main Layout & Page Header --- */
 .page-header {
-    width: 100%;
-    max-width: 1200px;
-    margin-bottom: 30px;
     text-align: center;
+    margin-bottom: 3rem;
     border-bottom: 2px solid var(--cat-yellow);
-    padding-bottom: 15px;
+    padding-bottom: 1.5rem;
 }
 
-.page-header h1 {
+h1 {
     font-size: 2.5rem;
     font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: 2px;
+    color: var(--cat-yellow);
+    margin-bottom: 0.5rem;
 }
 
-.dashboard-container {
-    width: 100%;
-    max-width: 1200px;
+.dashboard-container, .container {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-    gap: 20px;
-    animation: fadeIn 1s ease-in-out;
+    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
 }
 
-/* --- Widget Styling (for charts and other content) --- */
 .widget {
     background-color: var(--cat-dark-grey);
     border-radius: 12px;
-    padding: 20px;
+    padding: 1.5rem;
     border-top: 4px solid var(--cat-yellow);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    display: flex;
-    flex-direction: column;
-}
-
-.widget:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
 }
 
 .widget-title {
     font-size: 1.2rem;
     font-weight: 700;
-    margin-bottom: 20px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    border-bottom: 1px solid var(--cat-light-grey);
-    padding-bottom: 10px;
-}
-
-/* --- Chart Canvas Styling --- */
-.chart-container {
-    position: relative;
-    flex-grow: 1; /* Allows chart to fill widget space */
-    min-height: 300px;
-}
-
-canvas {
-    width: 100% !important;
-    height: 100% !important;
-}
-
-
-/* --- Center Screen Modal Alert (reusable) --- */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.8);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s ease;
-}
-.modal-overlay.show {
-    opacity: 1;
-    visibility: visible;
-}
-.modal-content {
-    background-color: var(--cat-dark-grey);
-    padding: 40px;
-    border-radius: 16px;
-    border-top: 8px solid var(--cat-red-alert);
-    text-align: center;
-    width: 90%;
-    max-width: 600px;
-    transform: scale(0.9);
-    transition: transform 0.3s ease;
-}
-.modal-overlay.show .modal-content {
-    transform: scale(1);
-}
-#modal-message {
-    font-size: 3rem;
-    font-weight: 900;
+    margin-bottom: 1rem;
     color: var(--cat-yellow);
-    margin-bottom: 30px;
-    display: block;
-    line-height: 1.2;
 }
-.modal-actions {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
+
+/* Styles for the main index.html hub */
+.nav-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    max-width: 1200px;
+    margin: auto;
 }
-.modal-button {
-    padding: 15px 30px;
-    font-size: 1.2rem;
-    font-weight: 700;
-    border: 2px solid var(--cat-light-grey);
+
+.nav-card {
+    background: var(--cat-dark-grey);
+    padding: 2rem;
     border-radius: 8px;
-    cursor: pointer;
-    background-color: transparent;
+    text-decoration: none;
     color: var(--cat-white);
-    transition: all 0.2s ease;
+    border-left: 5px solid var(--cat-yellow);
+    transition: transform 0.2s ease, background 0.2s ease;
 }
-.modal-button.acknowledge { border-color: var(--cat-green-ok); }
-.modal-button.acknowledge:hover { background-color: var(--cat-green-ok); color: var(--cat-white); }
-.modal-button.ignore:hover { background-color: var(--cat-light-grey); }
 
+.nav-card:hover {
+    transform: translateY(-5px);
+    background: var(--cat-light-grey);
+}
 
-/* --- Animations --- */
-@keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.nav-card h2 {
+    color: var(--cat-yellow);
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+}

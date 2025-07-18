@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Companion</title>
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        .companion-container { max-width: 800px; margin: auto; text-align: center; }
+        #recordButton {
+            width: 150px; height: 150px; font-size: 5rem;
+            background: var(--cat-green-ok); color: white;
+            border: none; border-radius: 50%; cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            display: flex; align-items: center; justify-content: center;
+            margin: 2rem auto;
+        }
+        #recordButton.recording {
+            background-color: var(--cat-red-alert);
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 var(--cat-red-alert); } 70% { box-shadow: 0 0 0 20px rgba(230, 0, 35, 0); } 100% { box-shadow: 0 0 0 0 rgba(230, 0, 35, 0); } }
+        #status { font-size: 1.2rem; min-height: 2rem; }
+        .transcription-box { text-align: left; background: var(--cat-dark-grey); padding: 1rem; border-radius: 8px; margin-top: 1rem; }
+        .transcription-box h3 { color: var(--cat-yellow); margin-top: 0; }
+    </style>
+</head>
+<body>
+    <header class="page-header">
+        <h1>Voice Companion "Mathi"</h1>
+        <p>Press the button and speak in Tamil to ask for help or play music.</p>
+    </header>
+
+    <div class="companion-container">
+        <button id="recordButton">🎤</button>
+        <p id="status">Press to start recording</p>
+
+        <div id="userBox" class="transcription-box" style="display:none;">
+            <h3>You Said:</h3>
+            <p id="userText"></p>
+        </div>
+        <div id="aiBox" class="transcription-box" style="display:none;">
+            <h3>Mathi Responded:</h3>
+            <p id="aiText"></p>
+        </div>
+    </div>
+
+    <script>
+        const recordButton = document.getElementById('recordButton');
+        const statusDisplay = document.getElementById('status');
+        const userBox = document.getElementById('userBox');
+        const aiBox = document.getElementById('aiBox');
+        const userText = document.getElementById('userText');
+        const aiText = document.getElementById('aiText');
+
+        let isRecording = false;
+        let mediaRecorder;
+        let audioChunks = [];
+
+        recordButton.addEventListener('click', () => {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                isRecording = true;
+                recordButton.classList.add('recording');
+                statusDisplay.textContent = 'Listening... Speak now.';
+                
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start();
+                
+                mediaRecorder.ondataavailable = (event) => audioChunks.push(event.data);
+
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    audioChunks = [];
+                    stream.getTracks().forEach(track => track.stop()); // Stop the mic
+                    await sendAudioToServer(audioBlob);
+                };
+            } catch (err) {
+                statusDisplay.textContent = "Error: Could not access microphone.";
+                console.error("Microphone error:", err);
+            }
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            recordButton.classList.remove('recording');
+            statusDisplay.textContent = "Processing...";
+            mediaRecorder.stop();
+        }
+
+        async function sendAudioToServer(blob) {
+            const formData = new FormData();
+            formData.append('audio', blob, 'recording.webm');
+            
+            try {
+                const response = await fetch('http://127.0.0.1:5005/companion/ask', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error(`Server error: ${response.statusText}`);
+
+                const data = await response.json();
+                handleServerResponse(data);
+
+            } catch (err) {
+                statusDisplay.textContent = "Error: Could not connect to companion.";
+                console.error("Server communication error:", err);
+            }
+        }
+
+        function handleServerResponse(data) {
+            statusDisplay.textContent = "Press to start recording"; // Reset status
+
+            // Display transcriptions
+            userText.textContent = data.user_transcription;
+            aiText.textContent = data.ai_response_text;
+            userBox.style.display = 'block';
+            aiBox.style.display = 'block';
+
+            // Handle actions
+            if (data.action === 'play_music' && data.action_payload.youtube_query) {
+                const query = encodeURIComponent(data.action_payload.youtube_query);
+                window.open(`https://www.youtube.com/results?search_query=${query}`, '_blank');
+            }
+
+            // Play the audio response
+            if (data.ai_response_audio_b64) {
+                const audioData = atob(data.ai_response_audio_b64);
+                const uint8Array = new Uint8Array(audioData.length);
+                for (let i = 0; i < audioData.length; i++) {
+                    uint8Array[i] = audioData.charCodeAt(i);
+                }
+                const audioBlob = new Blob([uint8Array], { type: 'audio/mp3' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+                const audio = new Audio(audioUrl);
+                audio.play();
+            }
+        }
+    </script>
+</body>
+</html>

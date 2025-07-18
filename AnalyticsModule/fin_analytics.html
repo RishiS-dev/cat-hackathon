@@ -71,7 +71,7 @@
 
             // --- Fetch data from our Python backend ---
             try {
-                const response = await fetch('http://127.0.0.1:5001/api/profiler_data');
+                const response = await fetch('http://127.0.0.1:5002/api/profiler_data');
                 if (!response.ok) throw new Error('Network response was not ok.');
                 
                 const data = await response.json();
