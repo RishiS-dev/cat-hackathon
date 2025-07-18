@@ -305,7 +305,6 @@
                 const data = await getData('/api/live_status');
                 if (data.live_data) updateDashboard(data.live_data);
                 
-                // Find the first important alert to show as a modal.
                 let criticalAlert = null;
                 if (data.alerts && data.alerts.length > 0) {
                      criticalAlert = data.alerts.find(alert => alert.type !== 'MACHINE_ANOMALY');
@@ -314,7 +313,6 @@
                 if (criticalAlert) {
                     showCriticalModal(criticalAlert);
                 } else {
-                    // If no new critical alerts are coming from the server, allow a new one to be shown if it appears later.
                     lastShownCriticalAlert = null;
                 }
 
@@ -331,36 +329,33 @@
             try {
                 await postData('/api/login', { operator_id: DEMO_OPERATOR_ID, machine_id: DEMO_MACHINE_ID });
                 
-                let scheduleData = await getData('/api/schedule');
-                if(scheduleData.length === 0) {
-                    const DUMMY_SCHEDULE_PAYLOAD = [{
-                        "assigned_date": new Date().toISOString().split('T')[0], "operator_id": DEMO_OPERATOR_ID, "machine_id": DEMO_MACHINE_ID,
-                        "task_type": "Trenching", "load_cycles_planned": 50,
-                        "geofence_points": [ [76.9558, 11.0168], [76.9568, 11.0168], [76.9568, 11.0178], [76.9558, 11.0178], [76.9558, 11.0168] ],
-                        "task_inputs": { "soil_type": "Clay", "terrain": "Incline", "temperature_c": 32, "precipitation_mm": 0, "average_rpm": 1900 }
-                    }];
-                    await postData('/api/schedule', DUMMY_SCHEDULE_PAYLOAD);
-                    scheduleData = await getData('/api/schedule');
-                }
+                // --- THIS IS THE CORRECTED PART ---
+                // We just get the schedule. We don't create a dummy one anymore.
+                const scheduleData = await getData('/api/schedule');
                 
                 const scheduleList = document.getElementById('schedule-list');
-                scheduleList.innerHTML = '';
+                scheduleList.innerHTML = ''; // Clear any existing items
                 
-                scheduleData.forEach(task => {
-                    const li = document.createElement('li');
-                    li.className = 'schedule-item';
-                    li.innerHTML = `
-                        <div>
-                            <div style="font-weight: 700; font-size: 1rem; margin-bottom: 0.25rem;">${task.task_type}</div>
-                            <div style="font-size: 0.8rem; color: #ccc;">${task.load_cycles_planned} Cycles</div>
-                        </div>
-                        <div class="schedule-item-time">Est: ...</div>
-                    `;
-                    li.onclick = () => selectTask(li, task.task_id);
-                    scheduleList.appendChild(li);
-                });
+                if (scheduleData.length === 0) {
+                    scheduleList.innerHTML = '<li>No tasks scheduled for today.</li>';
+                } else {
+                    scheduleData.forEach(task => {
+                        const li = document.createElement('li');
+                        li.className = 'schedule-item';
+                        li.innerHTML = `
+                            <div>
+                                <div style="font-weight: 700; font-size: 1rem; margin-bottom: 0.25rem;">${task.task_type}</div>
+                                <div style="font-size: 0.8rem; color: #ccc;">${task.load_cycles_planned} Cycles</div>
+                            </div>
+                            <div class="schedule-item-time">Est: ...</div>
+                        `;
+                        li.onclick = () => selectTask(li, task.task_id);
+                        scheduleList.appendChild(li);
+                    });
+                }
 
-                if (scheduleList.firstChild) {
+                // Automatically select the first task if it exists
+                if (scheduleList.firstChild && scheduleList.firstChild.onclick) {
                     scheduleList.firstChild.click();
                 }
                 
@@ -368,7 +363,9 @@
 
             } catch (error) {
                 console.error("Startup sequence failed:", error);
-                alert("Could not initialize application. Are all backend servers running and accessible?");
+                // Changed alert to console.error to avoid blocking the UI
+                console.error("Could not initialize application. Are all backend servers running and accessible?");
+                document.getElementById('schedule-list').innerHTML = '<li>Error loading schedule.</li>';
             }
 
             document.getElementById('acknowledge-btn').onclick = hideModal;
