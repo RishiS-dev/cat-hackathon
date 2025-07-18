@@ -6,47 +6,91 @@
     <title>Learning Assistant</title>
     <link rel="stylesheet" href="../styles.css">
     <style>
-        .assistant-container { max-width: 800px; margin: auto; }
-        #question { width: 100%; padding: 12px; font-size: 1rem; background: var(--cat-light-grey); border: 1px solid var(--cat-yellow); color: white; border-radius: 6px; }
-        #askButton { width: 100%; padding: 12px; font-size: 1.2rem; background: var(--cat-yellow); color: var(--cat-black); border: none; border-radius: 6px; cursor: pointer; font-weight: 700; margin-top: 1rem; }
-        #responseArea { margin-top: 2rem; background: var(--cat-dark-grey); padding: 1.5rem; border-radius: 8px; min-height: 100px; white-space: pre-wrap; line-height: 1.6; }
+        :root {
+            --cat-yellow: #FFCD11;
+            --cat-black: #1A1A1A;
+            --cat-dark-grey: #2D2D2D;
+            --cat-light-grey: #454545;
+        }
+        body {
+            background-color: var(--cat-black);
+            color: white;
+            font-family: sans-serif;
+        }
+        .assistant-container { max-width: 800px; margin: auto; padding: 1rem; }
+        .input-area { display: flex; gap: 1rem; align-items: center; }
+        #question { flex-grow: 1; padding: 12px; font-size: 1rem; background: var(--cat-light-grey); border: 1px solid var(--cat-yellow); color: white; border-radius: 6px; }
+        #askButton { padding: 12px 20px; font-size: 1rem; background: var(--cat-yellow); color: var(--cat-black); border: none; border-radius: 6px; cursor: pointer; font-weight: 700; }
+        #micButton { background: var(--cat-dark-grey); border: 1px solid var(--cat-yellow); color: var(--cat-yellow); border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background-color 0.2s; }
+        #micButton.recording { background-color: #e63946; border-color: #e63946; color: white; animation: pulse 1.5s infinite; }
+        #responseContainer { margin-top: 2rem; }
+        #status { text-align: center; color: var(--cat-yellow); font-style: italic; min-height: 24px; }
+        #responseArea { margin-top: 1rem; background: var(--cat-dark-grey); padding: 1.5rem; border-radius: 8px; min-height: 100px; white-space: pre-wrap; line-height: 1.6; border-left: 4px solid var(--cat-yellow); }
+        #youtubeArea { margin-top: 1.5rem; }
+        #youtubeArea h3 { border-bottom: 2px solid var(--cat-yellow); padding-bottom: 0.5rem; }
+        #youtubeArea a { color: var(--cat-yellow); text-decoration: none; display: block; margin-top: 0.5rem; }
+        #youtubeArea a:hover { text-decoration: underline; }
         .loader { display: none; margin: 2rem auto; width: 50px; height: 50px; border: 5px solid var(--cat-light-grey); border-top: 5px solid var(--cat-yellow); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(230, 57, 70, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(230, 57, 70, 0); } 100% { box-shadow: 0 0 0 0 rgba(230, 57, 70, 0); } }
     </style>
 </head>
 <body>
     <header class="page-header">
         <h1>Machine Learning Assistant</h1>
-        <p>Ask a question about machine operations to get an answer from the technical manual.</p>
+        <p>Ask a question about machine operations. Use your voice or type it in.</p>
     </header>
 
     <div class="assistant-container">
-        <form id="assistantForm">
+        <form id="assistantForm" class="input-area">
             <input type="text" id="question" placeholder="e.g., How do I check the hydraulic fluid?" required>
-            <button type="submit" id="askButton">Ask Assistant</button>
+            <button type="submit" id="askButton">Ask</button>
+            <button type="button" id="micButton">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+            </button>
         </form>
+        
+        <div id="status">Awaiting your question...</div>
         <div class="loader" id="loader"></div>
-        <pre id="responseArea">Awaiting your question...</pre>
+
+        <div id="responseContainer">
+            <pre id="responseArea"></pre>
+            <div id="youtubeArea"></div>
+        </div>
+        
+        <audio id="responseAudio" style="display:none;"></audio>
     </div>
 
     <script>
-        const form = document.getElementById('assistantForm');
+        const textForm = document.getElementById('assistantForm');
         const questionInput = document.getElementById('question');
         const responseArea = document.getElementById('responseArea');
+        const youtubeArea = document.getElementById('youtubeArea');
         const loader = document.getElementById('loader');
-        const button = document.getElementById('askButton');
+        const statusDiv = document.getElementById('status');
+        const textButton = document.getElementById('askButton');
+        
+        const micButton = document.getElementById('micButton');
+        const responseAudio = document.getElementById('responseAudio');
 
-        form.addEventListener('submit', async (e) => {
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+
+        // --- Handle Text Input ---
+        textForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const question = questionInput.value;
             if (!question) return;
-
-            responseArea.textContent = "";
-            loader.style.display = 'block';
-            button.disabled = true;
-
+            
+            // Note: This now calls the old text endpoint.
+            // You could merge them, but this is simpler.
+            const endpoint = 'http://127.0.0.1:5004/learning/ask_text';
+            
+            setLoading(true, "Thinking...");
+            
             try {
-                const response = await fetch('http://127.0.0.1:5004/learning/ask', {
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ question: question })
@@ -55,16 +99,118 @@
                 if (!response.ok) throw new Error(`Server responded with status: ${response.status}`);
                 
                 const data = await response.json();
-                responseArea.textContent = data.answer;
+                updateUI(data.answer, `You asked: "${data.question}"`, []); // No youtube links for text
 
             } catch (error) {
                 console.error("Error asking assistant:", error);
-                responseArea.textContent = `Error: Could not connect to the assistant. Please check if the server is running.\n\n${error.message}`;
+                updateUI(`Error: Could not connect to the assistant.\n\n${error.message}`, "Connection Failed", []);
             } finally {
-                loader.style.display = 'none';
-                button.disabled = false;
+                setLoading(false);
             }
         });
+
+        // --- Handle Voice Input ---
+        micButton.addEventListener('click', () => {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        });
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = sendAudioToServer;
+
+                audioChunks = [];
+                mediaRecorder.start();
+                isRecording = true;
+                micButton.classList.add('recording');
+                statusDiv.textContent = '🔴 Recording... Click mic to stop.';
+            } catch (error) {
+                console.error("Error accessing microphone:", error);
+                statusDiv.textContent = 'Could not access microphone. Please grant permission.';
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+                isRecording = false;
+                micButton.classList.remove('recording');
+                setLoading(true, "Transcribing and processing...");
+            }
+        }
+
+        async function sendAudioToServer() {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            const formData = new FormData();
+            formData.append('audio_data', audioBlob);
+
+            try {
+                const response = await fetch('http://127.0.0.1:5004/learning/ask_audio', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error(`Server error: ${response.statusText}`);
+
+                const data = await response.json();
+                
+                updateUI(data.answer, `I heard: "${data.question}"`, data.youtube_links);
+
+                if (data.audio_response) {
+                    const audioSrc = `data:audio/mp3;base64,${data.audio_response}`;
+                    responseAudio.src = audioSrc;
+                    responseAudio.play();
+                }
+
+            } catch (error) {
+                console.error("Error sending audio:", error);
+                updateUI(`Error processing audio. Please try again.`, "Error", []);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // --- UI Helper Functions ---
+        function setLoading(isLoading, message = '') {
+            if (isLoading) {
+                loader.style.display = 'block';
+                statusDiv.textContent = message;
+                textButton.disabled = true;
+                micButton.disabled = true;
+                responseArea.textContent = '';
+                youtubeArea.innerHTML = '';
+            } else {
+                loader.style.display = 'none';
+                statusDiv.textContent = 'Awaiting your question...';
+                textButton.disabled = false;
+                micButton.disabled = false;
+            }
+        }
+
+        function updateUI(answer, status, youtubeLinks) {
+            responseArea.textContent = answer || "I couldn't find an answer in the manual.";
+            statusDiv.textContent = status;
+            
+            let youtubeHTML = '';
+            if (youtubeLinks && youtubeLinks.length > 0) {
+                youtubeHTML += '<h3>▶️ Supplementary YouTube Videos:</h3>';
+                youtubeLinks.forEach(video => {
+                    youtubeHTML += `<a href="${video.url}" target="_blank">${video.title}</a>`;
+                });
+            }
+            youtubeArea.innerHTML = youtubeHTML;
+        }
+
     </script>
 </body>
 </html>
